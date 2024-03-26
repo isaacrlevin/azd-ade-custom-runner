@@ -2,7 +2,7 @@
 # Licensed under the MIT License.
 
 ARG BASE_IMAGE=mcr.microsoft.com/deployment-environments/runners/core
-ARG IMAGE_VERSION=latest
+ARG IMAGE_VERSION=2.5.0-preview
 
 FROM ${BASE_IMAGE}:${IMAGE_VERSION}
 WORKDIR /
@@ -42,4 +42,3 @@ RUN dotnet workload install aspire
 COPY scripts/* /scripts/
 RUN find /scripts/ -type f -iname "*.sh" -exec dos2unix '{}' '+'
 RUN find /scripts/ -type f -iname "*.sh" -exec chmod +x {} \;
-#ENTRYPOINT [ "/bin/bash" ]
