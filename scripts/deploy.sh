@@ -12,6 +12,7 @@ deploymentOutput=""
 echo "$ADE_OPERATION_PARAMETERS"
 # format the parameters as arm parameters
 branchName=$(echo "$ADE_OPERATION_PARAMETERS" | jq '.branch')
+repoUrl=$(echo "$ADE_OPERATION_PARAMETERS" | jq '.repoUrl')
 
 echo "Signing into AZD using MSI"
 while true; do
@@ -25,19 +26,30 @@ done
 
 azd config set auth.useAzCliAuth true
 
-git clone https://github.com/isaaclevintest/eShop.git --quiet
-cd eShop
-git fetch --quiet
-
-if [ -z "$branchName" ]; then
-  echo "No branch name provided. Using default branch"
+if [ -z "$repoUrl" ]; then
+  echo "No Repo Provided. Exiting."
+  exit 1
 else
-  echo "Checking out $branchName branch"
-  branchName=`sed -e 's/^"//' -e 's/"$//' <<<"$branchName"`
-  git checkout "$branchName" --quiet
+  repoUrl=`sed -e 's/^"//' -e 's/"$//' <<<"$repoUrl"`
+  echo "Cloning https://github.com/$repoUrl.git"
+  git clone "https://github.com/$repoUrl.git" repo --quiet
 fi
 
+cd repo
+git fetch --quiet
+echo "$branchName"
 
+if [ -v $branchName ]; then
+    if [ -z "$branchName" ]  ; then
+      echo "No branch name provided. Using default branch"
+    else
+      branchName=`sed -e 's/^"//' -e 's/"$//' <<<"$branchName"`
+      echo "Checking out $branchName branch"
+      git checkout "$branchName" --quiet
+    fi
+else
+    echo "No branch name provided. Using default branch"
+fi
 
 if [ -d "$ADE_STORAGE/.azure" ]; then
   echo ".azure folder already exists. Existing Environment. Copying to directory"
