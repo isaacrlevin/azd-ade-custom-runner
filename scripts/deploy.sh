@@ -14,15 +14,23 @@ echo "$ADE_OPERATION_PARAMETERS"
 branchName=$(echo "$ADE_OPERATION_PARAMETERS" | jq '.branch')
 repoUrl=$(echo "$ADE_OPERATION_PARAMETERS" | jq '.repoUrl')
 
-echo "Signing into AZD using MSI"
-while true; do
-    # managed identity isn't available immediately
-    # we need to do retry after a short nap
-    az login --identity --allow-no-subscriptions --only-show-errors --output none 2> $ADE_ERROR_LOG && {
-        echo "Successfully signed into Azure"
-        break
-    } || sleep 5
-done
+# Today azd cli does not support managed identity login, so need to login with a service principal
+# echo "Signing into AZD using MSI"
+# while true; do
+#     # managed identity isn't available immediately
+#     # we need to do retry after a short nap
+#     az login --identity --allow-no-subscriptions --only-show-errors --output none 2> $ADE_ERROR_LOG && {
+#         echo "Successfully signed into Azure"
+#         break
+#     } || sleep 5
+# done
+
+# Get SP details from ADE_OPERATION_PARAMETERS
+appId=$(echo "$ADE_OPERATION_PARAMETERS" | jq '.appId')
+appSecret=$(echo "$ADE_OPERATION_PARAMETERS" | jq '.appsecret')
+tenant=$(echo "$ADE_OPERATION_PARAMETERS" | jq '.tenantid')
+
+login=$(az login --service-principal -u $appId -p $appSecret --tenant $tenant)
 
 azd config set auth.useAzCliAuth true
 
@@ -39,7 +47,7 @@ cd repo
 git fetch --quiet
 echo "$branchName"
 
-if [ -v $branchName ]; then
+if [ -v branchName ]; then
     if [ -z "$branchName" ]  ; then
       echo "No branch name provided. Using default branch"
     else
@@ -81,23 +89,35 @@ export AZD_DEBUG_DOTNET_APPHOST_USE_RESOURCE_GROUP_DEPLOYMENTS="true"
 export AZURE_RESOURCE_GROUP=$ADE_RESOURCE_GROUP_NAME
 azd config set alpha.resourceGroupDeployments on
 
+echo $AZURE_RESOURCE_GROUP
+echo $AZD_DEBUG_DOTNET_APPHOST_USE_RESOURCE_GROUP_DEPLOYMENTS
+
+
 azd provision --no-prompt > "azdProvision.txt"
 
 if [ $? -eq 0 ]; then
     provisionContnet=$(cat "azdProvision.txt")
     echo "$provisionContnet"
-    azd deploy --no-prompt > "azdDeploy.txt"
-    if [ $? -eq 0 ]; then
-      deployContent=$(cat "azdDeploy.txt")
-      echo "Outputs successfully generated for ADE"
-      echo "$deployContent"
-      mkdir -p "$ADE_STORAGE/.azure"
-      cp -a ".azure/" "$ADE_STORAGE/"
-      echo "Copied .azure folder to persistent storage"
-    else
-        content=$(cat "azdDeploy.txt")
-        echo "$content"
+    #azd deploy --no-prompt > "azdDeploy.txt"
+    # if [ $? -eq 0 ]; then
+    #   deployContent=$(cat "azdDeploy.txt")
+    #   echo "Outputs successfully generated for ADE"
+    #   echo "$deployContent"
+    #   mkdir -p "$ADE_STORAGE/.azure"
+    #   cp -a ".azure/" "$ADE_STORAGE/"
+    #   echo "Copied .azure folder to persistent storage"
+    # else
+    #     content=$(cat "azdDeploy.txt")
+    #     echo "$content"
+    # fi
+        echo -e "\n>>> Generating outputs for ADE...\n"
+
+    deploymentOutput=$(az deployment group show -g "$ADE_RESOURCE_GROUP_NAME" -n "$deploymentName" --query properties.outputs)
+    if [ -z "$deploymentOutput" ]; then
+        deploymentOutput="{}"
     fi
+    echo "{\"outputs\": $deploymentOutput}" > $ADE_OUTPUTS
+    echo "Outputs successfully generated for ADE"
 else
     echo "Deployment failed to create."
 fi
